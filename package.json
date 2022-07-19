@@ -1,0 +1,25 @@
+{
+  "name": "imageapi",
+  "version": "0.0.1",
+  "description": "Use Twitch API to collect user profile image",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Strrato/TwitchImageAPI.git"
+  },
+  "author": "Strrato",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Strrato/TwitchImageAPI/issues"
+  },
+  "homepage": "https://github.com/Strrato/TwitchImageAPI#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.1",
+    "express": "^4.18.1",
+    "node-twitch": "^0.4.5"
+  }
+}
