@@ -41,15 +41,14 @@ app.listen(3000, () => {
 
 app.get('/api/userimage/:ids', (req, res) => {
   console.log('get on api/userimage');
+
   let headerToken = req.header('X-AUTH-TOKEN');
-  console.log(headerToken);
   if ( typeof headerToken === typeof void(0) || !headerToken){
     res.status(403).send("UNAUTHORIZED");
     return;
   }
 
   let apiToken = Buffer.from(headerToken, "base64").toString("utf-8");
-  console.log(apiToken);
   if ( apiToken !== APPLICATION_TOKEN ){
     res.status(403).send("UNAUTHORIZED");
     return;
@@ -77,13 +76,15 @@ app.get('/api/userimage/:ids', (req, res) => {
     }
     let image = getCache(id);
     if (typeof image !== typeof void(0) && image !== null){
+      console.log(`cache ${id} found`);
       results[id] = image;
     }
     arIds.splice(i, 1);
     i++;
   }
 
-  if (ids.length === 0){
+  if (arIds.length === 0){
+    console.log('send results from cache');
     res.status(200).send(JSON.stringify(results));
     return;
   }
