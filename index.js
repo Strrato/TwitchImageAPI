@@ -6,7 +6,7 @@ const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const fs = require('fs');
 const cors = require('cors');
 
-let cache = require('./assets/cache/users.json');
+let cache = {};
 let usersCache;
 
 const twitch = new TwitchApi({
@@ -34,23 +34,25 @@ app.use(cors({
   origin: '*'
 }));
 
-app.listen(3000, () => {
-  console.log('Server listen on port 3000');
+app.listen(2000, () => {
+  console.log('Server listen on port 2000');
 });
 
+app.get('/', (req, res) => {
+  res.send('Hello World!')
+});
 
 app.get('/api/userimage/:ids', (req, res) => {
   console.log('get on api/userimage');
 
   let headerToken = req.header('X-AUTH-TOKEN');
   if ( typeof headerToken === typeof void(0) || !headerToken){
-    res.status(403).send("UNAUTHORIZED");
+    res.status(403).send("UNAUTHORIZED 1");
     return;
   }
 
-  let apiToken = Buffer.from(headerToken, "base64").toString("utf-8");
-  if ( apiToken !== APPLICATION_TOKEN ){
-    res.status(403).send("UNAUTHORIZED");
+  if ( headerToken !== APPLICATION_TOKEN ){
+    res.status(403).send("UNAUTHORIZED 2");
     return;
   }
 
@@ -61,39 +63,33 @@ app.get('/api/userimage/:ids', (req, res) => {
     return;
   }
 
-  let arIds = ids.split(',');
+  let arIds = ids.split('_');
   if (arIds.length < 1){
     res.status(404).send("Invalid ids format");
     return;
   }
   let results = {};
 
-  let i = 0;
-  for(let id of arIds){
-    if (!id){
+  for(let i in arIds){
+    let id = arIds[i];
+    if (typeof cache[id] !== typeof void(0)){
+      results[id] = cache[id];
       arIds.splice(i, 1);
-      continue;
     }
-    let image = getCache(id);
-    if (typeof image !== typeof void(0) && image !== null){
-      console.log(`cache ${id} found`);
-      results[id] = image;
-    }
-    arIds.splice(i, 1);
-    i++;
   }
 
-  if (arIds.length === 0){
-    console.log('send results from cache');
+  if (arIds.length == 0){
+    console.log('send images from cache');
     res.status(200).send(JSON.stringify(results));
     return;
   }
 
   // Call twitch API
-  twitch.getUsers(ids).then(result => {
+  console.log('Call twitch api');
+  twitch.getUsers(arIds).then(result => {
     for(let data of result.data){
       results[data.id] = data.profile_image_url;
-      addCache(data.id, data.profile_image_url);
+      cache[data.id] = data.profile_image_url;
     }
 
     res.status(200).send(JSON.stringify(results));
