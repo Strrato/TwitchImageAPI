@@ -55,7 +55,7 @@ app.get('/api/userimage/:ids', (req, res) => {
   }
 
   let ids = req.params.ids;
-  console.log(ids);
+  
   if (typeof ids === typeof void(0) || ids === ""){
     res.status(404).send("Missings ids in request");
     return;
