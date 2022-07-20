@@ -63,7 +63,7 @@ app.get('/api/userimage/:ids', (req, res) => {
     return;
   }
 
-  let arIds = ids.split('_');
+  let arIds = ids.split(',');
   if (arIds.length < 1){
     res.status(404).send("Invalid ids format");
     return;
@@ -72,7 +72,7 @@ app.get('/api/userimage/:ids', (req, res) => {
 
   for(let i in arIds){
     let id = arIds[i];
-    if (typeof cache[id] !== typeof void(0)){
+    if (id in cache){
       results[id] = cache[id];
       arIds.splice(i, 1);
     }
