@@ -5,6 +5,7 @@ const app = express();
 const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const fs = require('fs');
 const cors = require('cors');
+const TOKEN_REGEX = /["'`]+/;
 
 let cache = {};
 let usersCache;
@@ -46,13 +47,15 @@ app.get('/api/userimage/:ids', (req, res) => {
   console.log('get on api/userimage');
 
   let headerToken = req.header('X-AUTH-TOKEN');
+  headerToken = headerToken.replace(TOKEN_REGEX, "Invalid");
+  
   if ( typeof headerToken === typeof void(0) || !headerToken){
-    res.status(403).send("UNAUTHORIZED 1");
+    res.status(403).send("UNAUTHORIZED");
     return;
   }
 
   if ( headerToken !== APPLICATION_TOKEN ){
-    res.status(403).send("UNAUTHORIZED 2");
+    res.status(403).send("UNAUTHORIZED");
     return;
   }
 
@@ -98,4 +101,5 @@ app.get('/api/userimage/:ids', (req, res) => {
     console.log(err);
     res.status(500).send("Twitch api error");
   })
+
 });
