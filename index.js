@@ -5,7 +5,7 @@ const app = express();
 const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const fs = require('fs');
 const cors = require('cors');
-const TOKEN_REGEX = /["'`]+/;
+const SECURITY_REGEX = /["'`]+/;
 
 let cache = {};
 let usersCache;
@@ -47,7 +47,7 @@ app.get('/api/userimage/:ids', (req, res) => {
   console.log('get on api/userimage');
 
   let headerToken = req.header('X-AUTH-TOKEN');
-  headerToken = headerToken.replace(TOKEN_REGEX, "Invalid");
+  headerToken = headerToken.replace(SECURITY_REGEX, "Invalid");
   
   if ( typeof headerToken === typeof void(0) || !headerToken){
     res.status(403).send("UNAUTHORIZED");
@@ -60,7 +60,7 @@ app.get('/api/userimage/:ids', (req, res) => {
   }
 
   let ids = req.params.ids;
-  
+  ids = ids.replace(SECURITY_REGEX, "");
   if (typeof ids === typeof void(0) || ids === ""){
     res.status(404).send("Missings ids in request");
     return;
