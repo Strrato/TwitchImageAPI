@@ -103,3 +103,49 @@ app.get('/api/userimage/:ids', (req, res) => {
   })
 
 });
+
+app.get('/api/gameimage/:id', (req, res) => {
+
+  let headerToken = req.header('X-AUTH-TOKEN');
+  headerToken = headerToken.replace(SECURITY_REGEX, "Invalid");
+  
+  if ( typeof headerToken === typeof void(0) || !headerToken){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  if ( headerToken !== APPLICATION_TOKEN ){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  let id = req.params.id;
+  id = id.replace(SECURITY_REGEX, "");
+
+  twitch.getStreams({ channel : id }).then(result => {
+    if (result.data.length > 0){
+      let data = result.data[0];
+
+      twitch.getGames(data.game_id).then(result2 => {
+        if (result2.data.length > 0){
+          let gameInfo = {
+            game : result2.data[0],
+            data : data
+          };
+          res.status(200).send(JSON.stringify(gameInfo));
+        }else {
+          res.status(500).send("Cannot get game info");
+        }
+      }).catch(err => {
+        console.log(err);
+        res.status(500).send("Twitch api error");
+      })
+      return;
+    }
+
+    res.status(500).send("Offline");
+  }).catch(err => {
+    console.log(err);
+    res.status(500).send("Twitch api error");
+  })
+});
