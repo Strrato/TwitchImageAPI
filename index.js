@@ -6,6 +6,7 @@ const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const fs = require('fs');
 const cors = require('cors');
 const SECURITY_REGEX = /["'`]+/;
+const fetch = require('node-fetch');
 
 let cache = {};
 let usersCache;
@@ -42,6 +43,41 @@ app.listen(2000, () => {
 app.get('/', (req, res) => {
   res.send('Hello World!')
 });
+
+function getSteamDescription(gameName)
+{
+  gameName = gameName.toLowerCase();
+  throwErr = true;
+  return new Promise((resolve, reject) => {
+    var result = {};
+    // Try to get steam description
+    fetch('https://api.steampowered.com/ISteamApps/GetAppList/v0002/?format=json')
+    .then(res => res.json())
+    .then(json => {
+        if (typeof json.applist !== typeof void(0) && json.applist.apps.length > 0){
+          for(var o of json.applist.apps){
+            if (gameName === o.name.toLowerCase()){
+              throwErr = false;
+              fetch('https://store.steampowered.com/api/appdetails?l=french&appids=' + o.appid)
+              .then(res => res.json())
+              .then(gameData => {
+                result = gameData[Object.keys(gameData)[0]];
+                if (result.success){
+                  resolve(result);
+                }else {
+                  reject('Not found');
+                }
+              });
+            }
+          }
+          if (throwErr){
+            reject('Not found');
+          }
+        }
+    });
+  });
+
+}
 
 app.get('/api/userimage/:ids', (req, res) => {
   console.log('get on api/userimage');
@@ -130,9 +166,18 @@ app.get('/api/gameimage/:id', (req, res) => {
         if (result2.data.length > 0){
           let gameInfo = {
             game : result2.data[0],
-            data : data
+            data : data,
+            description : null
           };
-          res.status(200).send(JSON.stringify(gameInfo));
+
+          // Try to get steam description
+          getSteamDescription(gameInfo.game.name).then(result3 => {
+            gameInfo.description = result3.data.short_description;
+            res.status(200).send(JSON.stringify(gameInfo));
+          }, err => {
+            res.status(200).send(JSON.stringify(gameInfo));
+          });
+
         }else {
           res.status(500).send("Cannot get game info");
         }
