@@ -3,34 +3,17 @@ const TwitchApi = require("node-twitch").default;
 const express = require('express');
 const app = express();
 const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
-const fs = require('fs');
 const cors = require('cors');
 const SECURITY_REGEX = /["'`]+/;
 const fetch = require('node-fetch');
 
 let cache = {};
-let usersCache;
+let cacheCreated = new Date();
 
 const twitch = new TwitchApi({
   client_id: process.env.CLIENT_ID,
   client_secret: process.env.CLIENT_SECRET
 });
-
-const getCache = (userId) => {
-  return cache[userId];
-};
-
-const addCache = (userId, userImage) => {
-  cache[userId] = userImage;
-  let strCache = JSON.stringify(cache, null, 2);
-  fs.writeFile("./assets/cache/users.json", strCache, err => {
-    if (err){
-      console.log("Error writing cache user", err);
-    }else {
-      console.log("Cache user written");
-    }
-  })
-};
 
 app.use(cors({
   origin: '*'
@@ -43,6 +26,12 @@ app.listen(2000, () => {
 app.get('/', (req, res) => {
   res.send('Hello World!')
 });
+
+function getHoursDiff(startDate, endDate) {
+  var msInHour = 1000 * 60 * 60;
+  return Math.round(Math.abs(endDate - startDate) / msInHour);
+}
+
 
 function getSteamDescription(gameName)
 {
@@ -109,6 +98,13 @@ app.get('/api/userimage/:ids', (req, res) => {
   }
   let results = {};
 
+  let now = new Date();
+  if (getHoursDiff(cacheCreated, now) >= 1){
+    console.log("reset cache");
+    cache = {};
+    cacheCreated = new Date();
+  }
+
   for(let i in arIds){
     let id = arIds[i];
     if (id in cache){
@@ -141,6 +137,7 @@ app.get('/api/userimage/:ids', (req, res) => {
 });
 
 app.get('/api/gameimage/:id', (req, res) => {
+  console.log('get on api/gameimage');
 
   let headerToken = req.header('X-AUTH-TOKEN');
   headerToken = headerToken.replace(SECURITY_REGEX, "Invalid");
@@ -157,6 +154,8 @@ app.get('/api/gameimage/:id', (req, res) => {
 
   let id = req.params.id;
   id = id.replace(SECURITY_REGEX, "");
+
+  console.log('Game info requested by', id);
 
   twitch.getStreams({ channel : id }).then(result => {
     if (result.data.length > 0){
