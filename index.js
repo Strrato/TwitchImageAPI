@@ -15,6 +15,12 @@ const twitch = new TwitchApi({
   client_secret: process.env.CLIENT_SECRET
 });
 
+const langMatches = {
+  'fr' : 'french',
+  'en' : 'english',
+  'es' : 'spanish'
+};
+
 app.use(cors({
   origin: '*'
 }));
@@ -33,7 +39,7 @@ function getHoursDiff(startDate, endDate) {
 }
 
 
-function getSteamDescription(gameName)
+function getSteamDescription(gameName, lang)
 {
   gameName = gameName.toLowerCase();
   throwErr = true;
@@ -47,7 +53,9 @@ function getSteamDescription(gameName)
           for(var o of json.applist.apps){
             if (gameName === o.name.toLowerCase()){
               throwErr = false;
-              fetch('https://store.steampowered.com/api/appdetails?l=french&appids=' + o.appid)
+              console.log('loading game description for : '+ gameName);
+              console.log('Prefered language : ' + lang);
+              fetch('https://store.steampowered.com/api/appdetails?l='+ lang +'&appids=' + o.appid)
               .then(res => res.json())
               .then(gameData => {
                 result = gameData[Object.keys(gameData)[0]];
@@ -155,6 +163,8 @@ app.get('/api/gameimage/:id', (req, res) => {
   let id = req.params.id;
   id = id.replace(SECURITY_REGEX, "");
 
+  
+
   console.log('Game info requested by', id);
 
   twitch.getStreams({ channel : id }).then(result => {
@@ -169,8 +179,10 @@ app.get('/api/gameimage/:id', (req, res) => {
             description : null
           };
 
+          let lang = typeof langMatches[data.language] !== typeof void(0) ? langMatches[data.language] : 'english';
+
           // Try to get steam description
-          getSteamDescription(gameInfo.game.name).then(result3 => {
+          getSteamDescription(gameInfo.game.name, lang).then(result3 => {
             gameInfo.description = result3.data.short_description;
             res.status(200).send(JSON.stringify(gameInfo));
           }, err => {
