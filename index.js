@@ -6,11 +6,14 @@ const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const cors = require('cors');
 const SECURITY_REGEX = /["'`]+/;
 const fetch = require('node-fetch');
+const axios = require("axios"); 
+const fs = require("fs");
+const gameUrlCacheFile = "./assets/cache/gamesurls.json";
 
 let cache = {};
 let cacheCreated = new Date();
 
-const twitch = new TwitchApi({
+let twitch = new TwitchApi({
   client_id: process.env.CLIENT_ID,
   client_secret: process.env.CLIENT_SECRET
 });
@@ -74,6 +77,60 @@ function getSteamDescription(gameName, lang)
     });
   });
 
+}
+
+function getGameUrlCache()
+{
+
+  let res = {};
+
+  try {
+    const data = fs.readFileSync(gameUrlCacheFile, { encoding: "utf8", flag : 'r' });
+    if (data){
+      res = JSON.parse(data);
+    }
+  }catch(e){
+    console.log(e);
+  }
+  
+  return res;
+}
+
+function cacheGameUrl(gameName, url)
+{
+  try {
+    let cache = getGameUrlCache();
+    cache[gameName] = url;
+    fs.writeFileSync(gameUrlCacheFile, JSON.stringify(cache));
+  }catch(e){
+
+  }
+
+}
+
+async function getInstantLink(gameName)
+{
+
+  let cache = getGameUrlCache();
+  if (typeof cache[gameName] !== typeof void(0)){
+    console.log('load game url from cache');
+    return cache[gameName];
+  }
+
+  const response = await axios.get(`https://www.bing.com/search?q=site%3Ainstant-gaming.com+acheter+%22${gameName}%22`); 
+  const html = response.data; 
+  const res = html.match(/href="(https:\/\/www.instant-gaming.com\/fr\/\d+-[A-Za-z0-9\-\/]+)"/);
+  const urlPattern = /(?:https?):\/\/(\w+:?\w*)?(\S+)(:\d+)?(\/|\/([\w#!:.?+=&%!\-\/]))?/;
+  if (res !== null && typeof res[1] !== typeof void(0) && urlPattern.test(res[1])){
+    const url = ""+res[1];
+    if (url.includes("instant-gaming.com")){
+      cacheGameUrl(gameName, res[1]);
+      return url;
+    }
+    console.log('Invalid instant url', url);
+  }
+  
+  return null;
 }
 
 app.get('/api/userimage/:ids', (req, res) => {
@@ -144,7 +201,7 @@ app.get('/api/userimage/:ids', (req, res) => {
 
 });
 
-app.get('/api/gameimage/:id', (req, res) => {
+app.get('/api/gameimage/:id', async (req, res) => {
   console.log('get on api/gameimage');
 
   let headerToken = req.header('X-AUTH-TOKEN');
@@ -171,15 +228,19 @@ app.get('/api/gameimage/:id', (req, res) => {
     if (result.data.length > 0){
       let data = result.data[0];
 
-      twitch.getGames(data.game_id).then(result2 => {
+      twitch.getGames(data.game_id).then(async result2 => {
         if (result2.data.length > 0){
           let gameInfo = {
             game : result2.data[0],
             data : data,
-            description : null
+            description : null,
+            instantLink : null
           };
 
           let lang = typeof langMatches[data.language] !== typeof void(0) ? langMatches[data.language] : 'english';
+
+          let url = await getInstantLink(gameInfo.game.name);
+          gameInfo.instantLink = url;
 
           // Try to get steam description
           getSteamDescription(gameInfo.game.name, lang).then(result3 => {
@@ -204,4 +265,29 @@ app.get('/api/gameimage/:id', (req, res) => {
     console.log(err);
     res.status(500).send("Twitch api error");
   })
+});
+
+app.get('/api/renew', async (req, res) => {
+  console.log('get on api/renew');
+
+  let headerToken = req.header('X-AUTH-TOKEN');
+  headerToken = headerToken.replace(SECURITY_REGEX, "Invalid");
+  
+  if ( typeof headerToken === typeof void(0) || !headerToken){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  if ( headerToken !== APPLICATION_TOKEN ){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  twitch = new TwitchApi({
+    client_id: process.env.CLIENT_ID,
+    client_secret: process.env.CLIENT_SECRET
+  });
+
+  res.status(200).send('OK');
+  return;
 });
