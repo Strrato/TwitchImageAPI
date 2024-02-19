@@ -6,9 +6,9 @@ const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const cors = require('cors');
 const SECURITY_REGEX = /["'`]+/;
 const fetch = require('node-fetch');
-const axios = require("axios"); 
 const fs = require("fs");
 const gameUrlCacheFile = "./assets/cache/gamesurls.json";
+const https = require('https');
 
 let cache = {};
 let cacheCreated = new Date();
@@ -17,6 +17,11 @@ let twitch = new TwitchApi({
   client_id: process.env.CLIENT_ID,
   client_secret: process.env.CLIENT_SECRET
 });
+
+const SUBSCRIPTION_KEY = process.env.AZURE_SUBSCRIPTION_KEY;
+if (!SUBSCRIPTION_KEY) {
+  throw new Error('AZURE_SUBSCRIPTION_KEY is not set.')
+}
 
 const langMatches = {
   'fr' : 'french',
@@ -105,6 +110,20 @@ function cacheGameUrl(gameName, url)
   }catch(e){
 
   }
+}
+
+
+function deleteFromCacheUrl(gameName)
+{
+  try {
+    let cache = getGameUrlCache();
+    if (typeof cache[gameName] !== typeof void(0)){
+      delete cache[gameName];
+      fs.writeFileSync(gameUrlCacheFile, JSON.stringify(cache));
+    }
+  }catch(e){
+
+  }
 
 }
 
@@ -117,20 +136,51 @@ async function getInstantLink(gameName)
     return cache[gameName];
   }
 
-  const response = await axios.get(`https://www.bing.com/search?q=site%3Ainstant-gaming.com+acheter+%22${gameName}%22`); 
-  const html = response.data; 
-  const res = html.match(/href="(https:\/\/www.instant-gaming.com\/fr\/\d+-[A-Za-z0-9\-\/]+)"/);
-  const urlPattern = /(?:https?):\/\/(\w+:?\w*)?(\S+)(:\d+)?(\/|\/([\w#!:.?+=&%!\-\/]))?/;
-  if (res !== null && typeof res[1] !== typeof void(0) && urlPattern.test(res[1])){
-    const url = ""+res[1];
-    if (url.includes("instant-gaming.com")){
-      cacheGameUrl(gameName, res[1]);
-      return url;
+  let query = `site:instant-gaming.com pc acheter "${gameName}"`;
+
+  let results = await bingWebSearch(query);
+  console.dir(results, {depth: null});
+  let url = null;
+
+  if (typeof results.webPages !== typeof void(0) && results.webPages.value.length > 0){
+    const urlPattern = /(?:https?):\/\/(\w+:?\w*)?(\S+)(:\d+)?(\/|\/([\w#!:.?+=&%!\-\/]))?/;
+    const instantPattern = /(https?:\/\/www.instant-gaming.com\/[A-z]{2}\/\d+-[A-Za-z0-9\-\/]+)/;
+
+    for(let i in results.webPages.value){
+      let val = results.webPages.value[i];
+      if (urlPattern.test(val.displayUrl) && instantPattern.test(val.displayUrl)){
+        url = val.displayUrl;
+        break;
+      }
     }
-    console.log('Invalid instant url', url);
+  }
+
+  if (url !== null){
+    console.log("Url found for game: ", gameName, url);
+    cacheGameUrl(gameName, url);
   }
   
-  return null;
+  return url;
+}
+
+function bingWebSearch(query) {
+
+  return new Promise((resolve, error) => {
+    https.get({
+      hostname: 'api.bing.microsoft.com',
+      path:     '/v7.0/search?q=' + encodeURIComponent(query),
+      headers:  { 'Ocp-Apim-Subscription-Key': SUBSCRIPTION_KEY },
+    }, res => {
+      let body = ''
+      res.on('data', part => body += part)
+      res.on('end', () => {
+        resolve(JSON.parse(body));
+      })
+      res.on('error', e => {
+        error(e);
+      })
+    })
+  });
 }
 
 app.get('/api/userimage/:ids', (req, res) => {
@@ -290,4 +340,30 @@ app.get('/api/renew', async (req, res) => {
 
   res.status(200).send('OK');
   return;
+});
+
+app.get('/api/resetCache/:gameName', async (req, res) => {
+  console.log('get on api/resetCache');
+
+  let headerToken = req.header('X-AUTH-TOKEN');
+  headerToken = headerToken.replace(SECURITY_REGEX, "Invalid");
+  if ( typeof headerToken === typeof void(0) || !headerToken){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  if ( headerToken !== APPLICATION_TOKEN ){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+  
+  let gameName = decodeURIComponent(req.params.gameName);
+  deleteFromCacheUrl(gameName);
+  res.status(200).send("OK");
+  return;
+});
+
+
+app.get('/test', async (req, res) => {
+  getInstantLink("Sea of Thieves");
 });
