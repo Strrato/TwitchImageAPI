@@ -1,0 +1,70 @@
+:root {
+    --background-theme: #333;
+}
+
+body {
+    background-color: var(--background-theme);
+}
+
+.col-logged {
+    background-color: var(--background-theme);
+}
+
+#register-form, 
+#login-form {
+    margin: 0 auto;
+    background-color: #fff;
+    width: 300px;
+    margin-top: 10%;
+    text-align: center;
+    padding: 15px;
+}
+
+#register-form i, 
+#login-form i {
+    width: 15px;;
+}
+
+#register-form input,
+#login-form input 
+{
+    margin: 0 auto;
+    text-align: center;
+}
+
+.user-profile {
+    text-align: center;
+}
+
+.profile-actions {
+    float: left;
+}
+
+.col-logged .card + .card {
+    margin-top: 20px;
+}
+
+.logo {
+    text-align: center;
+}
+
+.logo img {
+    width: 50px;
+}
+
+.loading, .loading-full {
+    content : url('/logo.png');
+    animation: fa-spin 2s infinite linear;
+    width: 50px;
+    margin: 0 auto;
+    padding: 0 !important;
+}
+
+.loading-full {
+    top: 50%;
+    position: relative;
+}
+
+.pointer {
+    cursor: pointer;
+}

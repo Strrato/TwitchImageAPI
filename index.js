@@ -5,10 +5,11 @@ const app = express();
 const APPLICATION_TOKEN = process.env.APPLICATION_TOKEN;
 const cors = require('cors');
 const SECURITY_REGEX = /["'`]+/;
-const fetch = require('node-fetch');
-const fs = require("fs");
-const gameUrlCacheFile = "./assets/cache/gamesurls.json";
-const https = require('https');
+
+const UrlScrapper = require('./assets/js/UrlScraper.js');
+const GameInfo = require('./assets/js/GameInfo.js');
+const admin = require('./admin.js');
+
 
 let cache = {};
 let cacheCreated = new Date();
@@ -18,20 +19,12 @@ let twitch = new TwitchApi({
   client_secret: process.env.CLIENT_SECRET
 });
 
-const SUBSCRIPTION_KEY = process.env.AZURE_SUBSCRIPTION_KEY;
-if (!SUBSCRIPTION_KEY) {
-  throw new Error('AZURE_SUBSCRIPTION_KEY is not set.')
-}
-
-const langMatches = {
-  'fr' : 'french',
-  'en' : 'english',
-  'es' : 'spanish'
-};
 
 app.use(cors({
   origin: '*'
 }));
+
+app.use(express.json());
 
 app.listen(2000, () => {
   console.log('Server listen on port 2000');
@@ -41,147 +34,13 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 });
 
+admin.registerAdmin(app);
+
 function getHoursDiff(startDate, endDate) {
   var msInHour = 1000 * 60 * 60;
   return Math.round(Math.abs(endDate - startDate) / msInHour);
 }
 
-
-function getSteamDescription(gameName, lang)
-{
-  gameName = gameName.toLowerCase();
-  throwErr = true;
-  return new Promise((resolve, reject) => {
-    var result = {};
-    // Try to get steam description
-    fetch('https://api.steampowered.com/ISteamApps/GetAppList/v0002/?format=json')
-    .then(res => res.json())
-    .then(json => {
-        if (typeof json.applist !== typeof void(0) && json.applist.apps.length > 0){
-          for(var o of json.applist.apps){
-            if (gameName === o.name.toLowerCase()){
-              throwErr = false;
-              console.log('loading game description for : '+ gameName);
-              console.log('Prefered language : ' + lang);
-              fetch('https://store.steampowered.com/api/appdetails?l='+ lang +'&appids=' + o.appid)
-              .then(res => res.json())
-              .then(gameData => {
-                result = gameData[Object.keys(gameData)[0]];
-                if (result.success){
-                  resolve(result);
-                }else {
-                  reject('Not found');
-                }
-              });
-            }
-          }
-          if (throwErr){
-            reject('Not found');
-          }
-        }
-    });
-  });
-
-}
-
-function getGameUrlCache()
-{
-
-  let res = {};
-
-  try {
-    const data = fs.readFileSync(gameUrlCacheFile, { encoding: "utf8", flag : 'r' });
-    if (data){
-      res = JSON.parse(data);
-    }
-  }catch(e){
-    console.log(e);
-  }
-  
-  return res;
-}
-
-function cacheGameUrl(gameName, url)
-{
-  try {
-    let cache = getGameUrlCache();
-    cache[gameName] = url;
-    fs.writeFileSync(gameUrlCacheFile, JSON.stringify(cache));
-  }catch(e){
-
-  }
-}
-
-
-function deleteFromCacheUrl(gameName)
-{
-  try {
-    let cache = getGameUrlCache();
-    if (typeof cache[gameName] !== typeof void(0)){
-      delete cache[gameName];
-      fs.writeFileSync(gameUrlCacheFile, JSON.stringify(cache));
-    }
-  }catch(e){
-
-  }
-
-}
-
-async function getInstantLink(gameName)
-{
-
-  let cache = getGameUrlCache();
-  if (typeof cache[gameName] !== typeof void(0)){
-    console.log('load game url from cache');
-    return cache[gameName];
-  }
-
-  let query = `site:instant-gaming.com pc acheter "${gameName}"`;
-
-  let results = await bingWebSearch(query);
-  console.dir(results, {depth: null});
-  let url = null;
-
-  if (typeof results.webPages !== typeof void(0) && results.webPages.value.length > 0){
-    const urlPattern = /(?:https?):\/\/(\w+:?\w*)?(\S+)(:\d+)?(\/|\/([\w#!:.?+=&%!\-\/]))?/;
-    const instantPattern = /(https?:\/\/www.instant-gaming.com\/[A-z]{2}\/\d+-[A-Za-z0-9\-\/]+)/;
-
-    for(let i in results.webPages.value){
-      let val = results.webPages.value[i];
-      if (urlPattern.test(val.displayUrl) && instantPattern.test(val.displayUrl)){
-        url = val.displayUrl;
-        break;
-      }
-    }
-  }
-
-  if (url !== null){
-    console.log("Url found for game: ", gameName, url);
-    cacheGameUrl(gameName, url);
-  }
-  
-  return url;
-}
-
-function bingWebSearch(query) {
-
-  return new Promise((resolve, error) => {
-    https.get({
-      hostname: 'api.bing.microsoft.com',
-      path:     '/v7.0/search?q=' + encodeURIComponent(query),
-      headers:  { 'Ocp-Apim-Subscription-Key': SUBSCRIPTION_KEY },
-    }, res => {
-      let body = ''
-      res.on('data', part => body += part)
-      res.on('end', () => {
-        resolve(JSON.parse(body));
-      })
-      res.on('error', e => {
-        error(e);
-      })
-    })
-  });
-}
 
 app.get('/api/userimage/:ids', (req, res) => {
   console.log('get on api/userimage');
@@ -270,51 +129,15 @@ app.get('/api/gameimage/:id', async (req, res) => {
   let id = req.params.id;
   id = id.replace(SECURITY_REGEX, "");
 
-  
-
   console.log('Game info requested by', id);
 
-  twitch.getStreams({ channel : id }).then(result => {
-    if (result.data.length > 0){
-      let data = result.data[0];
-
-      twitch.getGames(data.game_id).then(async result2 => {
-        if (result2.data.length > 0){
-          let gameInfo = {
-            game : result2.data[0],
-            data : data,
-            description : null,
-            instantLink : null
-          };
-
-          let lang = typeof langMatches[data.language] !== typeof void(0) ? langMatches[data.language] : 'english';
-
-          let url = await getInstantLink(gameInfo.game.name);
-          gameInfo.instantLink = url;
-
-          // Try to get steam description
-          getSteamDescription(gameInfo.game.name, lang).then(result3 => {
-            gameInfo.description = result3.data.short_description;
-            res.status(200).send(JSON.stringify(gameInfo));
-          }, err => {
-            res.status(200).send(JSON.stringify(gameInfo));
-          });
-
-        }else {
-          res.status(500).send("Cannot get game info");
-        }
-      }).catch(err => {
-        console.log(err);
-        res.status(500).send("Twitch api error");
-      })
-      return;
-    }
-
-    res.status(500).send("Offline");
-  }).catch(err => {
-    console.log(err);
-    res.status(500).send("Twitch api error");
-  })
+  try {
+    res.status(200).send(await GameInfo.getGameInfos(twitch, id));
+  }catch(e){
+    console.log(e);
+    res.status(500).send(e);
+  }
+  return;
 });
 
 app.get('/api/renew', async (req, res) => {
@@ -358,12 +181,36 @@ app.get('/api/resetCache/:gameName', async (req, res) => {
   }
   
   let gameName = decodeURIComponent(req.params.gameName);
-  deleteFromCacheUrl(gameName);
+  UrlScrapper.deleteFromCacheUrl(gameName);
   res.status(200).send("OK");
   return;
 });
 
+app.post('/api/setUrlCache', async (req, res) => {
+  console.log('post on api/setUrlCache');
 
-app.get('/test', async (req, res) => {
-  getInstantLink("Sea of Thieves");
+  let headerToken = req.header('X-AUTH-TOKEN');
+  headerToken = headerToken.replace(SECURITY_REGEX, "Invalid");
+  if ( typeof headerToken === typeof void(0) || !headerToken){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  if ( headerToken !== APPLICATION_TOKEN ){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  if (!req.body.name || !req.body.url){
+    res.status(403).send("UNAUTHORIZED");
+    return;
+  }
+
+  let gameName = req.body.name;
+  let url = req.body.url;
+
+  UrlScrapper.cacheGameUrl(gameName, url);
+
+  res.status(200).send("OK");
+  return;
 });
